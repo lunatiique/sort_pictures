@@ -6,9 +6,12 @@ import subprocess
 import shlex
 from datetime import datetime
 from PIL import Image
-from PIL.ExifTags import TAGS, GPSTAGS
+from PIL.ExifTags import TAGS
 from tqdm import tqdm
 import re
+import piexif
+import pillow_heif
+pillow_heif.register_heif_opener()
 
 # fetch date from image
 def handle_image(file):
@@ -17,7 +20,24 @@ def handle_image(file):
     except:
         print("Unexpected error for file: " + file.split('\\')[-1] + ":", sys.exc_info()[0])
         return None
-    exif_data = image._getexif()
+    exif_data = None
+        # 📌 1️⃣ Extraction des métadonnées EXIF des images HEIC
+    if file.lower().endswith('.heic') or file.lower().endswith('.heif'):
+        heif_image = pillow_heif.open_heif(file)
+        metadata = heif_image.info.get("exif")
+
+        if metadata:
+            try:
+                exif_dict = piexif.load(metadata)
+                if "Exif" in exif_dict and 36867 in exif_dict["Exif"]:  # Tag 'DateTimeOriginal'
+                    creation_date = exif_dict["Exif"][36867].decode("utf-8")
+                    return creation_date
+            except Exception as e:
+                print(f"Error extracting HEIC metadata for {file}: {e}")
+
+    # 📌 2️⃣ Extraction EXIF pour JPEG/PNG
+    else:
+        exif_data = image.getexif()
     if exif_data is not None:
         for tag, value in exif_data.items():
             tag_name = TAGS.get(tag, tag)
